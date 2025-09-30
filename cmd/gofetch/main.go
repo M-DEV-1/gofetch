@@ -9,26 +9,34 @@ import (
 )
 
 func main() {
-	var url string = os.Args[1]
+	var urls []string = os.Args[1:]
+	for _, url := range urls {
+		title, err := handleUrl(url)
+		if err != nil {
+			fmt.Printf("%s %s", title, err)
+		} else {
+			fmt.Println(title)
+		}
+	}
+}
+
+func handleUrl(url string) (string, error) {
 	resp, err := http.Get(url)
 
 	if err != nil {
-		fmt.Println("Request Error", err)
-		return
+		return "Request Error: ", err
 	}
 
 	defer resp.Body.Close()
-	fmt.Println("Response Code", resp.StatusCode)
 
 	rootNode, err := html.Parse(resp.Body)
 
 	if err != nil {
-		fmt.Println("Parse Error: ", err)
-		return
+		return "Parse Error: ", err
 	}
 
 	title := findTitle(rootNode)
-	fmt.Println(title)
+	return title, nil
 }
 
 func findTitle(node *html.Node) string {
