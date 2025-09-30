@@ -36,6 +36,7 @@ func handleUrl(url string, results chan result) {
 
 	if err != nil {
 		results <- result{url: url, title: "Request Error: ", err: err}
+		return
 	}
 
 	defer resp.Body.Close()
@@ -44,6 +45,7 @@ func handleUrl(url string, results chan result) {
 
 	if err != nil {
 		results <- result{url: url, title: "Parse Error: ", err: err}
+		return
 	}
 
 	results <- result{url: url, title: findTitle(rootNode), err: nil}
