@@ -10,21 +10,27 @@ import (
 
 func main() {
 	var urls []string = os.Args[1:]
+	c := make(chan string)
+	cerr := make(chan error)
 	for _, url := range urls {
-		title, err := handleUrl(url)
+		go handleUrl(url, c, cerr)
+		title := <-c
+		err := <-cerr
 		if err != nil {
 			fmt.Printf("%s %s", title, err)
 		} else {
 			fmt.Println(title)
 		}
 	}
+
 }
 
-func handleUrl(url string) (string, error) {
+func handleUrl(url string, c chan string, cerr chan error) {
 	resp, err := http.Get(url)
 
 	if err != nil {
-		return "Request Error: ", err
+		c <- "Request Error: "
+		cerr <- err
 	}
 
 	defer resp.Body.Close()
@@ -32,11 +38,12 @@ func handleUrl(url string) (string, error) {
 	rootNode, err := html.Parse(resp.Body)
 
 	if err != nil {
-		return "Parse Error: ", err
+		c <- "Parse Error: "
+		cerr <- err
 	}
 
-	title := findTitle(rootNode)
-	return title, nil
+	c <- findTitle(rootNode)
+	cerr <- nil
 }
 
 func findTitle(node *html.Node) string {
