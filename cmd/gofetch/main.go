@@ -8,29 +8,34 @@ import (
 	"golang.org/x/net/html"
 )
 
-func main() {
-	var urls []string = os.Args[1:]
-	c := make(chan string)
-	cerr := make(chan error)
-	for _, url := range urls {
-		go handleUrl(url, c, cerr)
-		title := <-c
-		err := <-cerr
-		if err != nil {
-			fmt.Printf("%s %s", title, err)
-		} else {
-			fmt.Println(title)
-		}
-	}
-
+type result struct {
+	url   string
+	title string
+	err   error
 }
 
-func handleUrl(url string, c chan string, cerr chan error) {
+func main() {
+	var urls []string = os.Args[1:]
+	results := make(chan result, len(urls))
+	for _, url := range urls {
+		go handleUrl(url, results)
+	}
+
+	for i := 0; i < len(urls); i++ {
+		res := <-results
+		if res.err != nil {
+			fmt.Printf("%s %s", res.title, res.err)
+		} else {
+			fmt.Println(res.title)
+		}
+	}
+}
+
+func handleUrl(url string, results chan result) {
 	resp, err := http.Get(url)
 
 	if err != nil {
-		c <- "Request Error: "
-		cerr <- err
+		results <- result{url: url, title: "Request Error: ", err: err}
 	}
 
 	defer resp.Body.Close()
@@ -38,12 +43,10 @@ func handleUrl(url string, c chan string, cerr chan error) {
 	rootNode, err := html.Parse(resp.Body)
 
 	if err != nil {
-		c <- "Parse Error: "
-		cerr <- err
+		results <- result{url: url, title: "Parse Error: ", err: err}
 	}
 
-	c <- findTitle(rootNode)
-	cerr <- nil
+	results <- result{url: url, title: findTitle(rootNode), err: nil}
 }
 
 func findTitle(node *html.Node) string {
