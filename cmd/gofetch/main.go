@@ -15,16 +15,25 @@ type result struct {
 	err   error
 }
 
+type Visited struct {
+	mu   sync.Mutex
+	seen map[string]bool
+}
+
 func main() {
 	var urls []string = os.Args[1:]
 	results := make(chan result, len(urls))
 	var wg sync.WaitGroup
+	visited := &Visited{seen: make(map[string]bool)}
 
 	for _, url := range urls {
 		wg.Add(1)
 		go func(u string) {
 			defer wg.Done()
-			handleUrl(u, results)
+			ok := visited.seenUrl(u)
+			if !ok {
+				handleUrl(u, results)
+			}
 		}(url)
 	}
 
@@ -36,9 +45,9 @@ func main() {
 	for res := range results {
 
 		if res.err != nil {
-			fmt.Printf("%s %s", res.title, res.err)
+			fmt.Printf("ERROR: [Title]: %s [Error]: %s", res.title, res.err)
 		} else {
-			fmt.Println(res.title)
+			fmt.Printf("[%s]: %s\n", res.url, res.title)
 		}
 	}
 }
@@ -76,4 +85,14 @@ func findTitle(node *html.Node) string {
 		}
 	}
 	return ""
+}
+
+func (v *Visited) seenUrl(url string) bool {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	_, ok := v.seen[url]
+	if !ok {
+		v.seen[url] = true
+	}
+	return ok
 }
