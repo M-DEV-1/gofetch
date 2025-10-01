@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"sync"
 
 	"golang.org/x/net/html"
 )
@@ -17,12 +18,23 @@ type result struct {
 func main() {
 	var urls []string = os.Args[1:]
 	results := make(chan result, len(urls))
+	var wg sync.WaitGroup
+
 	for _, url := range urls {
-		go handleUrl(url, results)
+		wg.Add(1)
+		go func(u string) {
+			defer wg.Done()
+			handleUrl(u, results)
+		}(url)
 	}
 
-	for i := 0; i < len(urls); i++ {
-		res := <-results
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	for res := range results {
+
 		if res.err != nil {
 			fmt.Printf("%s %s", res.title, res.err)
 		} else {
