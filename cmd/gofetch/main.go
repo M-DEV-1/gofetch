@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
+	"strings"
 	"sync"
 
 	"golang.org/x/net/html"
@@ -12,6 +14,7 @@ import (
 type result struct {
 	url   string
 	title string
+	links []string
 	err   error
 }
 
@@ -32,7 +35,7 @@ func main() {
 			defer wg.Done()
 			ok := visited.seenUrl(u)
 			if !ok {
-				handleUrl(u, results)
+				visited.handleUrl(u, results)
 			}
 		}(url)
 	}
@@ -48,11 +51,14 @@ func main() {
 			fmt.Printf("ERROR: [Title]: %s [Error]: %s", res.title, res.err)
 		} else {
 			fmt.Printf("[%s]: %s\n", res.url, res.title)
+			for _, link := range res.links {
+				fmt.Printf("Link: %s\n", link)
+			}
 		}
 	}
 }
 
-func handleUrl(url string, results chan result) {
+func (v *Visited) handleUrl(url string, results chan result) {
 	resp, err := http.Get(url)
 
 	if err != nil {
@@ -69,13 +75,17 @@ func handleUrl(url string, results chan result) {
 		return
 	}
 
-	results <- result{url: url, title: findTitle(rootNode), err: nil}
+	title := findTitle(rootNode)
+	links := v.findLinks(rootNode, []string{}, &url)
+	results <- result{url: url, title: title, links: links, err: nil}
 }
 
 func findTitle(node *html.Node) string {
 
 	if node.Type == html.ElementNode && node.Data == "title" {
-		return node.FirstChild.Data
+		if node.FirstChild != nil {
+			return node.FirstChild.Data
+		}
 	} else {
 		for child := node.FirstChild; child != nil; child = child.NextSibling {
 			result := findTitle(child)
@@ -85,6 +95,32 @@ func findTitle(node *html.Node) string {
 		}
 	}
 	return ""
+}
+
+func (v *Visited) findLinks(node *html.Node, links []string, baseUrl *string) []string {
+	base, _ := url.Parse(*baseUrl)
+	for child := node.FirstChild; child != nil; child = child.NextSibling {
+		if child.Type == html.ElementNode && child.Data == "a" && len(links) < 5 {
+			for _, attr := range child.Attr {
+				if attr.Key == "href" {
+					u, err := url.Parse(attr.Val)
+					if err != nil || attr.Val == "" || strings.HasPrefix(attr.Val, "#") || strings.HasPrefix(attr.Val, "mailto:") || strings.HasPrefix(attr.Val, "javascript:") || strings.HasPrefix(attr.Val, "tel:") {
+						continue
+					}
+					link := base.ResolveReference(u).String()
+					if v.seenUrl(link) {
+						continue
+					}
+					links = append(links, link)
+				}
+			}
+		}
+		links = v.findLinks(child, links, baseUrl)
+		if len(links) > 5 {
+			break
+		}
+	}
+	return links
 }
 
 func (v *Visited) seenUrl(url string) bool {
