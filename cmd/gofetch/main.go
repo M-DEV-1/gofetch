@@ -29,7 +29,7 @@ func main() {
 	var wg sync.WaitGroup
 	visited := &Visited{seen: make(map[string]bool)}
 
-	for _, url := range urls {
+	for _, u := range urls {
 		wg.Add(1)
 		go func(u string) {
 			defer wg.Done()
@@ -37,7 +37,7 @@ func main() {
 			if !ok {
 				visited.handleUrl(u, results)
 			}
-		}(url)
+		}(u)
 	}
 
 	go func() {
@@ -58,11 +58,11 @@ func main() {
 	}
 }
 
-func (v *Visited) handleUrl(url string, results chan result) {
-	resp, err := http.Get(url)
+func (v *Visited) handleUrl(u string, results chan result) {
+	resp, err := http.Get(u)
 
 	if err != nil {
-		results <- result{url: url, title: "Request Error: ", err: err}
+		results <- result{url: u, title: "Request Error: ", err: err}
 		return
 	}
 
@@ -71,13 +71,13 @@ func (v *Visited) handleUrl(url string, results chan result) {
 	rootNode, err := html.Parse(resp.Body)
 
 	if err != nil {
-		results <- result{url: url, title: "Parse Error: ", err: err}
+		results <- result{url: u, title: "Parse Error: ", err: err}
 		return
 	}
 
 	title := findTitle(rootNode)
-	links := v.findLinks(rootNode, []string{}, &url)
-	results <- result{url: url, title: title, links: links, err: nil}
+	links := v.findLinks(rootNode, []string{}, &u)
+	results <- result{url: u, title: title, links: links, err: nil}
 }
 
 func findTitle(node *html.Node) string {
@@ -100,7 +100,7 @@ func findTitle(node *html.Node) string {
 func (v *Visited) findLinks(node *html.Node, links []string, baseUrl *string) []string {
 	base, _ := url.Parse(*baseUrl)
 	for child := node.FirstChild; child != nil; child = child.NextSibling {
-		if child.Type == html.ElementNode && child.Data == "a" && len(links) < 5 {
+		if child.Type == html.ElementNode && child.Data == "a" && len(links) < 10 {
 			for _, attr := range child.Attr {
 				if attr.Key == "href" {
 					u, err := url.Parse(attr.Val)
@@ -110,25 +110,27 @@ func (v *Visited) findLinks(node *html.Node, links []string, baseUrl *string) []
 					link := base.ResolveReference(u).String()
 					if v.seenUrl(link) {
 						continue
+					} else {
+
 					}
 					links = append(links, link)
 				}
 			}
 		}
 		links = v.findLinks(child, links, baseUrl)
-		if len(links) > 5 {
+		if len(links) > 10 {
 			break
 		}
 	}
 	return links
 }
 
-func (v *Visited) seenUrl(url string) bool {
+func (v *Visited) seenUrl(u string) bool {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	_, ok := v.seen[url]
+	_, ok := v.seen[u]
 	if !ok {
-		v.seen[url] = true
+		v.seen[u] = true
 	}
 	return ok
 }
